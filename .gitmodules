@@ -1,0 +1,6 @@
+[submodule "nvmevirt"]
+	path = nvmevirt
+	url = https://github.com/Emmanuel9527/nvmevirt.git
+[submodule "mqsim"]
+	path = mqsim
+	url = https://github.com/Emmanuel9527/MQSim.git
