@@ -1,6 +1,6 @@
 # NVMeVirt `main.c` 架構說明
 
-這份文件用中文整理 `nvmevirt/main.c` 的主要責任。程式碼中的註解維持英文，這份 README 則用來幫助閱讀整體流程。
+這份文件整理了 `nvmevirt/main.c` 的主要責任。
 
 ## 1. `main.c` 在 NVMeVirt 中的角色
 
