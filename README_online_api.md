@@ -15,7 +15,7 @@
 
 ## 新增元件
 
-### `extract_nvmevirt_extents.sh`
+### `scripts/extract_nvmevirt_extents.sh`
 
 此 script 使用 `filefrag -b512 -v` 讀取檔案系統 extent metadata，將 mounted index files 轉成 preload CSV：
 
@@ -158,7 +158,7 @@ Fast_forward(time)
                   |
                   | filefrag extent metadata
                   v
-        extract_nvmevirt_extents.sh
+        scripts/extract_nvmevirt_extents.sh
                   |
                   | CSV: file,file_offset_bytes,slba,nlb
                   v
@@ -244,7 +244,7 @@ Fast_forward(time)
 
 ```bash
 INDEX_DIR=/mnt/nvmevirt/sift1m_diskann_index
-/home/emmanuel/projects/nvmevirt-mqsim/extract_nvmevirt_extents.sh "$INDEX_DIR"/* \
+/home/emmanuel/projects/nvmevirt-mqsim/scripts/extract_nvmevirt_extents.sh "$INDEX_DIR"/* \
   > /tmp/sift1m_nvmevirt_extents.csv
 ```
 
