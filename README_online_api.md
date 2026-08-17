@@ -48,6 +48,41 @@ status
 
 NVMeVirt 仍然處理真實 data path；MQSim 只回傳 timing。kernel 端採用 async pending completion：已送給 MQSim 的 command 會留在 pending work 裡，host submit path 不會同步等待 daemon，等 daemon 回覆後才更新該 command 的 completion target time。
 
+#### IPC shared memory implementation detail
+
+`/dev/nvmev-mqsim-ipc` 不是資料盤，也不是另一個 SSD namespace。它是 NVMeVirt kernel module 註冊給 daemon 使用的 character device。daemon 透過這個 device 取得 shared-memory IPC 區域：
+
+```text
+NVMeVirt kernel module
+  |
+  | vmalloc_user(mqsim_shm)
+  v
+kernel-owned shared memory object
+  |
+  | mmap handler: remap_vmalloc_range()
+  v
+MQSimIPCDaemon userspace mapping
+  |
+  +-- req_ring / req_entries[]
+  +-- resp_ring / resp_entries[]
+```
+
+這條 IPC shared memory path 和 NVMeVirt backing store 不同：
+
+```text
+backing store:
+  memmap=... at boot
+  memremap() in NVMeVirt
+  stores real DiskANN/index bytes
+
+IPC shared memory:
+  vmalloc_user(mqsim_shm) in NVMeVirt
+  mmap(/dev/nvmev-mqsim-ipc) in MQSimIPCDaemon
+  stores only request/response metadata
+```
+
+因此 request/response ring 裡只會放 `request_id`、`opcode`、`slba`、`nlb`、`latency_ns` 等 metadata；真正的 file data bytes 仍由 NVMeVirt backing store 負責保存與回傳。
+
 ### `MQSimIPCDaemon`
 
 `MQSimIPCDaemon` 是 userspace bridge。它會：
