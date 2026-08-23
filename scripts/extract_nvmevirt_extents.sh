@@ -41,3 +41,8 @@ for file in "${files[@]}"; do
     }
   '
 done
+
+# 此腳本會執行 filefrag 解析出 Extent，寫入 CSV。為了未來執行下面動作。
+# 這一段 host LBA 是 valid data。
+# 請用你的 FTL write path 幫它分配 NAND physical page。
+# 請建立 logical page address -> physical page address 的 mapping。
