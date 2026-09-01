@@ -224,6 +224,14 @@ Fast_forward(time)
        complete original NVMe command
 ```
 
+### Online read path queue map
+
+下面這張圖把目前 NVMeVirt + MQSim native online path 的 read request 流程，以及幾個重要 queue/timing point 放在同一張圖裡：
+
+![NVMeVirt + MQSim read path and internal queues](plots/mqsim_read_path_queues.svg)
+
+需要注意的是，`IO_Queue_Depth` 描述的是 MQSim NVMe host interface 的 submission/completion queue capacity；在目前 daemon 使用的 native online mode 中，request 會透過 `Host_Interface_NVMe::Submit_online_request()` 直接注入 MQSim。真正影響 backend 排隊延遲的主要位置，是 FTL 之後的 TSU flash transaction queues，以及 channel/chip/die busy timing。
+
 ## Preload 與 query 的順序
 
 目前假設 index files 已經先寫入 `/mnt/nvmevirt`，並且 logical address layout 已經完成 block shuffling。daemon 啟動後會先完成 extent preload，再開始接 host query I/O：

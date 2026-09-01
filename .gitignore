@@ -1,1 +1,22 @@
 WORKLOG_*.txt
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local benchmark / tracing scratch files
+*_iops_fp.dat
+*_mbps_fp.dat
+sys_iops_fp.dat
+sys_mbps_fp.dat
+*.blktrace.*
+*.trace.*
+*.fio.json
+*.fio.log
+
+# Generated result plots/tables. Keep hand-written diagrams in SVG.
+plots/*.png
+plots/*.csv
+
+# Local benchmark binaries
+scripts/batch_randread_bench

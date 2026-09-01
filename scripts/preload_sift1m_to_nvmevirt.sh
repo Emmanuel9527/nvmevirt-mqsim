@@ -6,6 +6,8 @@ MOUNT_DIR="${1:-}"
 PREFIX="${PREFIX:-sift1m_l2_R64_L100_pq0_default}"
 DEST_SUBDIR="${DEST_SUBDIR:-sift1m_diskann_index}"
 DROP_CACHES="${DROP_CACHES:-0}"
+EXTENTS_CSV="${EXTENTS_CSV:-/tmp/sift1m_nvmevirt_extents.csv}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ -z "$MOUNT_DIR" ]]; then
   echo "Usage: $0 /mnt/nvmevirt"
@@ -15,6 +17,7 @@ if [[ -z "$MOUNT_DIR" ]]; then
   echo "  PREFIX       DiskANN index prefix, default: $PREFIX"
   echo "  DEST_SUBDIR  directory under mount point, default: $DEST_SUBDIR"
   echo "  DROP_CACHES  set to 1 to run sync + drop_caches after copy"
+  echo "  EXTENTS_CSV  output path for MQSim preload extents, default: $EXTENTS_CSV"
   exit 1
 fi
 
@@ -53,6 +56,19 @@ sync
 
 echo "Preloaded files:"
 du -h "$MOUNT_DIR/$DEST_SUBDIR"/*
+
+"$SCRIPT_DIR/extract_nvmevirt_extents.sh" "$MOUNT_DIR/$DEST_SUBDIR" > "$EXTENTS_CSV"
+extent_lines="$(wc -l < "$EXTENTS_CSV")"
+if [[ "$extent_lines" -le 1 ]]; then
+  echo "Extent CSV is empty: $EXTENTS_CSV" >&2
+  exit 1
+fi
+
+echo
+echo "MQSim preload extents:"
+echo "  $EXTENTS_CSV"
+echo "  lines=$extent_lines"
+head "$EXTENTS_CSV"
 
 if [[ "$DROP_CACHES" == "1" ]]; then
   if [[ "$(id -u)" != "0" ]]; then

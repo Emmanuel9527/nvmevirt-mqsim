@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#1f2937"/>
+    </marker>
+    <style>
+      text { font-family: Arial, Helvetica, sans-serif; fill: #111827; }
+      .title { font-size: 34px; font-weight: 700; }
+      .subtitle { font-size: 18px; fill: #4b5563; }
+      .lane-title { font-size: 18px; font-weight: 700; fill: #374151; }
+      .box-title { font-size: 20px; font-weight: 700; }
+      .box-text { font-size: 15px; fill: #374151; }
+      .code { font-size: 13px; fill: #6b7280; font-family: Consolas, Menlo, monospace; }
+      .note { font-size: 14px; fill: #374151; }
+      .small { font-size: 13px; fill: #4b5563; }
+      .arrow-text { font-size: 14px; fill: #374151; }
+      .kernel { fill: #e0f2fe; stroke: #0284c7; }
+      .daemon { fill: #fef3c7; stroke: #d97706; }
+      .mqsim { fill: #ecfdf5; stroke: #059669; }
+      .queue { fill: #f5f3ff; stroke: #7c3aed; }
+      .flash { fill: #fff1f2; stroke: #e11d48; }
+      .timing { fill: #f8fafc; stroke: #64748b; }
+      .line { stroke: #1f2937; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 8 6; }
+      .thin { stroke-width: 1.6; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="980" fill="#ffffff"/>
+
+  <text x="70" y="70" class="title">NVMeVirt + MQSim Read Path and Internal Queues</text>
+  <text x="70" y="102" class="subtitle">Current online/native path: DiskANN read request enters NVMeVirt, asks MQSim daemon for latency, then NVMeVirt waits until the simulated completion time.</text>
+
+  <rect x="60" y="135" width="360" height="710" rx="12" fill="#f0f9ff" stroke="#bae6fd"/>
+  <rect x="450" y="135" width="250" height="710" rx="12" fill="#fffbeb" stroke="#fde68a"/>
+  <rect x="730" y="135" width="780" height="710" rx="12" fill="#f0fdf4" stroke="#bbf7d0"/>
+
+  <text x="85" y="170" class="lane-title">Kernel space</text>
+  <text x="475" y="170" class="lane-title">User space daemon</text>
+  <text x="755" y="170" class="lane-title">MQSim native online model</text>
+
+  <rect x="95" y="220" width="280" height="95" rx="10" class="kernel" stroke-width="2"/>
+  <text x="125" y="255" class="box-title">DiskANN / block read</text>
+  <text x="125" y="283" class="box-text">Read request reaches NVMeVirt</text>
+  <text x="125" y="305" class="code">/dev/nvme1n1, bio/request path</text>
+
+  <rect x="95" y="390" width="280" height="130" rx="10" class="kernel" stroke-width="2"/>
+  <text x="125" y="425" class="box-title">NVMeVirt MQSim IPC</text>
+  <text x="125" y="453" class="box-text">Send opcode, SLBA, NLB</text>
+  <text x="125" y="475" class="box-text">Wait for latency reply</text>
+  <text x="125" y="497" class="code">nvmevirt/mqsim_ipc.c</text>
+
+  <rect x="485" y="390" width="180" height="130" rx="10" class="daemon" stroke-width="2"/>
+  <text x="512" y="425" class="box-title">MQSim IPC</text>
+  <text x="512" y="453" class="box-title">Daemon</text>
+  <text x="512" y="481" class="box-text">Shared memory</text>
+  <text x="512" y="503" class="box-text">request/reply ring</text>
+
+  <rect x="765" y="205" width="305" height="130" rx="10" class="mqsim" stroke-width="2"/>
+  <text x="795" y="240" class="box-title">Online request injection</text>
+  <text x="795" y="268" class="box-text">Daemon calls MQSim directly</text>
+  <text x="795" y="290" class="box-text">No full SQ doorbell/fetch path here</text>
+  <text x="795" y="314" class="code">Submit_online_request()</text>
+
+  <rect x="1140" y="205" width="305" height="130" rx="10" class="queue" stroke-width="2"/>
+  <text x="1170" y="240" class="box-title">NVMe host queue model</text>
+  <text x="1170" y="268" class="box-text">Submission / completion queue depth</text>
+  <text x="1170" y="290" class="box-text">Used by original MQSim NVMe path</text>
+  <text x="1170" y="314" class="code">IO_Queue_Depth = 1024</text>
+
+  <rect x="765" y="390" width="305" height="125" rx="10" class="mqsim" stroke-width="2"/>
+  <text x="795" y="425" class="box-title">FTL address mapping</text>
+  <text x="795" y="453" class="box-text">LBA/LPN to physical flash address</text>
+  <text x="795" y="475" class="box-text">May generate mapping reads</text>
+  <text x="795" y="497" class="code">Address_Mapping_Unit_Page_Level</text>
+
+  <rect x="1140" y="390" width="305" height="180" rx="10" class="queue" stroke-width="2"/>
+  <text x="1170" y="425" class="box-title">TSU transaction queues</text>
+  <text x="1170" y="453" class="box-text">UserReadTRQueue</text>
+  <text x="1170" y="475" class="box-text">MappingReadTRQueue</text>
+  <text x="1170" y="497" class="box-text">GCRead / write / erase queues</text>
+  <text x="1170" y="525" class="code">TSU_Priority_OutOfOrder</text>
+  <text x="1170" y="547" class="small">This is the main internal queueing point.</text>
+
+  <rect x="765" y="625" width="305" height="140" rx="10" class="flash" stroke-width="2"/>
+  <text x="795" y="660" class="box-title">Flash transaction queue</text>
+  <text x="795" y="688" class="box-text">Actual list container for transactions</text>
+  <text x="795" y="710" class="box-text">Records queue length / waiting time</text>
+  <text x="795" y="734" class="code">Flash_Transaction_Queue</text>
+
+  <rect x="1140" y="625" width="305" height="140" rx="10" class="flash" stroke-width="2"/>
+  <text x="1170" y="660" class="box-title">Channel / chip / die timing</text>
+  <text x="1170" y="688" class="box-text">Issue command to target die</text>
+  <text x="1170" y="710" class="box-text">Die becomes BUSY until finish event</text>
+  <text x="1170" y="734" class="code">Flash_Chip::start_command_execution()</text>
+
+  <rect x="95" y="645" width="280" height="95" rx="10" class="kernel" stroke-width="2"/>
+  <text x="125" y="680" class="box-title">NVMeVirt completion</text>
+  <text x="125" y="708" class="box-text">Uses MQSim completion time</text>
+  <text x="125" y="730" class="box-text">Then completes kernel request</text>
+
+  <path class="line" d="M235 315 L235 385"/>
+  <path class="line" d="M375 455 L480 455"/>
+  <text x="392" y="438" class="arrow-text">shared memory request</text>
+
+  <path class="line" d="M665 425 C710 360, 715 290, 760 270"/>
+  <text x="675" y="338" class="arrow-text">call native MQSim model</text>
+
+  <path class="line" d="M1070 270 L1135 270"/>
+  <text x="1085" y="252" class="arrow-text">reference queue depth</text>
+
+  <path class="line" d="M918 335 L918 385"/>
+  <path class="line" d="M1070 452 L1135 470"/>
+  <text x="1084" y="437" class="arrow-text">enqueue flash transactions</text>
+
+  <path class="line" d="M1292 570 L1292 620"/>
+  <text x="1310" y="604" class="arrow-text">scheduler selects ready transaction</text>
+
+  <path class="line" d="M1140 695 L1075 695"/>
+  <text x="1085" y="678" class="arrow-text">dequeue / dispatch</text>
+
+  <path class="line" d="M765 695 C615 705, 575 610, 575 525"/>
+  <text x="615" y="662" class="arrow-text">completion time returned to daemon</text>
+
+  <path class="line" d="M485 485 L380 485"/>
+  <text x="392" y="512" class="arrow-text">latency reply</text>
+
+  <path class="line" d="M235 520 L235 640"/>
+
+  <rect x="90" y="875" width="1410" height="70" rx="8" class="timing" stroke-width="1.5"/>
+  <text x="115" y="904" class="note">
+    Key point: host-facing SQ/CQ depth only limits how many commands the host can expose. Real queueing in MQSim mostly happens after FTL mapping, inside TSU flash transaction queues, then through channel/chip/die busy timing.
+  </text>
+  <text x="115" y="929" class="note">
+    For DiskANN-like batch reads, the queue pressure is bursty: submit a batch, wait for completions, then submit the next batch.
+  </text>
+
+  <text x="765" y="820" class="code">Code anchors: mqsim_native_online_model.cpp:217, Host_Interface_NVMe.cpp:406, TSU_Priority_OutOfOrder.cpp:227, TSU_Base.cpp:125, Flash_Chip.cpp:114</text>
+</svg>
