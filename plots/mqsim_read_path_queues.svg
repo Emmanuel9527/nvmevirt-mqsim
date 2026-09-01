@@ -92,13 +92,13 @@
   <text x="650" y="342" class="arrow-text">submit to MQSim</text>
 
   <path class="line" d="M1110 280 L1175 280"/>
-  <text x="1127" y="258" class="arrow-text">host queue model</text>
+  <text x="1118" y="210" class="arrow-text">host queue model</text>
 
   <path class="line" d="M955 340 L955 415"/>
   <text x="974" y="384" class="arrow-text">request enters FTL</text>
 
   <path class="line" d="M1110 480 L1175 492"/>
-  <text x="1127" y="458" class="arrow-text">flash transactions</text>
+  <text x="1110" y="410" class="arrow-text">flash transactions</text>
 
   <path class="line" d="M1335 570 L1335 655"/>
   <text x="1354" y="618" class="arrow-text">dispatch</text>
