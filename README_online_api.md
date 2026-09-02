@@ -232,6 +232,39 @@ Fast_forward(time)
 
 需要注意的是，`IO_Queue_Depth` 描述的是 MQSim NVMe host interface 的 submission/completion queue capacity；在目前 daemon 使用的 native online mode 中，request 會透過 `Host_Interface_NVMe::Submit_online_request()` 直接注入 MQSim。真正影響 backend 排隊延遲的主要位置，是 FTL 之後的 TSU flash transaction queues，以及 channel/chip/die busy timing。
 
+### Internal queue congestion analysis
+
+為了判斷模擬器是否真的重現 SSD backend 的壅塞行為，native online daemon 會在 MQSim stats 中輸出 internal queue congestion table。這張表的目的不是看 host-facing NVMe SQ/CQ capacity，而是看 request 進入 MQSim 之後，是否在 FTL/TSU/flash backend 形成排隊。
+
+建議觀察的重點：
+
+1. `MQSim pending requests`
+   daemon 端目前送進 MQSim、但還沒有收到 completion callback 的 host I/O 數。這可以對照 NVMeVirt `/proc/nvmev/mqsim_ipc` 裡的 `pending` / `max_pending`。
+
+2. `TSU UserReadTRQueue`
+   user read transaction 在 SSD backend 的排隊深度。DiskANN random read 大多應該反映在這裡。如果 L 或 batch size 增加，但這個 queue 的 `AvgQLen` / `MaxQLen` 幾乎不變，代表 simulator backend 沒有產生足夠的 read-side contention。
+
+3. `MappingReadTRQueue`
+   FTL mapping metadata read 的排隊深度。若 CMT/mapping cache miss 增加，這裡可能會累積，進一步影響 user read latency。
+
+4. `GCRead` / `GCWrite` / `GCErase`
+   GC 或 wear-leveling 相關 transaction queue。對 read-only DiskANN query 來說，正常情況下這些 queue 應該很低；如果 preload 或背景狀態觸發 GC，這些 queue 會讓 read latency 變長。
+
+5. `AvgWait(us)` / `MaxWait(us)`
+   transaction 從進入該 TSU queue 到被 dispatch 到 flash chip 的等待時間。這是目前最直接的 simulator-internal queueing delay 指標。
+
+6. `ExecUtil(%)`
+   flash chip 執行 NAND command 的忙碌比例。若 `ExecUtil(%)` 很高，同時 queue waiting time 也高，代表 latency 增加主要來自 backend resource contention。
+
+7. `XferUtil(%)`
+   flash chip command/data transfer 的忙碌比例。若它高於 execution utilization，瓶頸可能更偏 channel/data transfer；若 execution utilization 高，瓶頸更偏 NAND die execution time。
+
+判讀方式：
+
+- 若 L 增加時 `Mean latency` 增加，且 `AvgWait(us)` / `MaxWait(us)` / `ExecUtil(%)` 也增加，代表 simulator latency growth 主要來自 backend queueing，這比較符合老師提到的 internal queue hypothesis。
+- 若 L 增加時 `Mean latency` 增加，但 TSU queue statistics 幾乎不變，代表 latency growth 可能主要只是固定 flash read latency 被更多 I/O 累加，而不是 SSD 內部壅塞。
+- 若 real SSD 出現非線性 latency growth，但 simulator 的 TSU queue 和 busy timing 都很平，代表 simulator 仍缺少 real SSD firmware/internal scheduling/cache state 造成的動態壅塞。
+
 ## Preload 與 query 的順序
 
 目前假設 index files 已經先寫入 `/mnt/nvmevirt`，並且 logical address layout 已經完成 block shuffling。daemon 啟動後會先完成 extent preload，再開始接 host query I/O：
