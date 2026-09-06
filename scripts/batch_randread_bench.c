@@ -128,7 +128,7 @@ int main(int argc, char **argv)
 	struct io_event *events = NULL;
 	void **buffers = NULL;
 	uint64_t *submit_ns = NULL;
-	uint64_t *io_lat = NULL, *batch_lat = NULL;
+	uint64_t *io_lat = NULL, *batch_lat = NULL, *batch_first_lat = NULL, *batch_spread = NULL;
 	size_t io_count = 0, io_cap = 0, batch_count = 0, batch_cap = 0;
 	uint64_t start_ns, warmup_end_ns, end_ns;
 	uint64_t state;
@@ -197,7 +197,9 @@ int main(int argc, char **argv)
 	batch_cap = 65536;
 	io_lat = malloc(io_cap * sizeof(*io_lat));
 	batch_lat = malloc(batch_cap * sizeof(*batch_lat));
-	if (!io_lat || !batch_lat) {
+	batch_first_lat = malloc(batch_cap * sizeof(*batch_first_lat));
+	batch_spread = malloc(batch_cap * sizeof(*batch_spread));
+	if (!io_lat || !batch_lat || !batch_first_lat || !batch_spread) {
 		fprintf(stderr, "latency allocation failed\n");
 		goto out;
 	}
@@ -209,6 +211,8 @@ int main(int argc, char **argv)
 
 	while (now_ns() < end_ns) {
 		uint64_t batch_submit_ns = now_ns();
+		uint64_t first_complete_ns = UINT64_MAX;
+		uint64_t last_complete_ns = 0;
 		int submitted = 0;
 		int completed = 0;
 		int measured = batch_submit_ns >= warmup_end_ns;
@@ -259,6 +263,10 @@ int main(int argc, char **argv)
 					goto out;
 				}
 				if (measured) {
+					if (complete_ns < first_complete_ns)
+						first_complete_ns = complete_ns;
+					if (complete_ns > last_complete_ns)
+						last_complete_ns = complete_ns;
 					if (io_count == io_cap) {
 						io_cap *= 2;
 						io_lat = realloc(io_lat, io_cap * sizeof(*io_lat));
@@ -278,12 +286,16 @@ int main(int argc, char **argv)
 			if (batch_count == batch_cap) {
 				batch_cap *= 2;
 				batch_lat = realloc(batch_lat, batch_cap * sizeof(*batch_lat));
-				if (!batch_lat) {
+				batch_first_lat = realloc(batch_first_lat, batch_cap * sizeof(*batch_first_lat));
+				batch_spread = realloc(batch_spread, batch_cap * sizeof(*batch_spread));
+				if (!batch_lat || !batch_first_lat || !batch_spread) {
 					fprintf(stderr, "batch latency realloc failed\n");
 					goto out;
 				}
 			}
 			batch_lat[batch_count++] = batch_done_ns - batch_submit_ns;
+			batch_first_lat[batch_count - 1] = first_complete_ns == UINT64_MAX ? 0 : first_complete_ns - batch_submit_ns;
+			batch_spread[batch_count - 1] = last_complete_ns > first_complete_ns ? last_complete_ns - first_complete_ns : 0;
 		}
 
 		if (gap_us > 0)
@@ -292,6 +304,8 @@ int main(int argc, char **argv)
 
 	qsort(io_lat, io_count, sizeof(*io_lat), cmp_u64);
 	qsort(batch_lat, batch_count, sizeof(*batch_lat), cmp_u64);
+	qsort(batch_first_lat, batch_count, sizeof(*batch_first_lat), cmp_u64);
+	qsort(batch_spread, batch_count, sizeof(*batch_spread), cmp_u64);
 
 	{
 		uint64_t sum = 0;
@@ -320,10 +334,14 @@ int main(int argc, char **argv)
 		fprintf(csv,
 			"bs,batch_size,gap_us,runtime_s,warmup_s,total_ios,total_batches,iops,bw_mib_s,"
 			"io_mean_us,io_stddev_us,io_p50_us,io_p90_us,io_p99_us,io_p999_us,io_p9999_us,io_max_us,"
-			"batch_mean_us,batch_p50_us,batch_p90_us,batch_p99_us,batch_p999_us,batch_max_us\n");
+			"batch_first_mean_us,batch_first_p50_us,batch_first_p90_us,batch_first_p99_us,batch_first_p999_us,batch_first_max_us,"
+			"batch_mean_us,batch_p50_us,batch_p90_us,batch_p99_us,batch_p999_us,batch_max_us,"
+			"batch_spread_mean_us,batch_spread_p50_us,batch_spread_p90_us,batch_spread_p99_us,batch_spread_p999_us,batch_spread_max_us\n");
 		fprintf(csv,
 			"%llu,%d,%d,%d,%d,%zu,%zu,%.2f,%.2f,"
 			"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,"
+			"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,"
+			"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,"
 			"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
 			(unsigned long long)bs, batch_size, gap_us, runtime_s, warmup_s,
 			io_count, batch_count, iops, bw_mib_s,
@@ -334,12 +352,24 @@ int main(int argc, char **argv)
 			(double)percentile(io_lat, io_count, 0.999) / 1000.0,
 			(double)percentile(io_lat, io_count, 0.9999) / 1000.0,
 			io_count ? (double)io_lat[io_count - 1] / 1000.0 : 0.0,
+			batch_count ? ((double)({ uint64_t s = 0; for (size_t i = 0; i < batch_count; i++) s += batch_first_lat[i]; s; }) / (double)batch_count) / 1000.0 : 0.0,
+			(double)percentile(batch_first_lat, batch_count, 0.50) / 1000.0,
+			(double)percentile(batch_first_lat, batch_count, 0.90) / 1000.0,
+			(double)percentile(batch_first_lat, batch_count, 0.99) / 1000.0,
+			(double)percentile(batch_first_lat, batch_count, 0.999) / 1000.0,
+			batch_count ? (double)batch_first_lat[batch_count - 1] / 1000.0 : 0.0,
 			batch_count ? ((double)({ uint64_t s = 0; for (size_t i = 0; i < batch_count; i++) s += batch_lat[i]; s; }) / (double)batch_count) / 1000.0 : 0.0,
 			(double)percentile(batch_lat, batch_count, 0.50) / 1000.0,
 			(double)percentile(batch_lat, batch_count, 0.90) / 1000.0,
 			(double)percentile(batch_lat, batch_count, 0.99) / 1000.0,
 			(double)percentile(batch_lat, batch_count, 0.999) / 1000.0,
-			batch_count ? (double)batch_lat[batch_count - 1] / 1000.0 : 0.0);
+			batch_count ? (double)batch_lat[batch_count - 1] / 1000.0 : 0.0,
+			batch_count ? ((double)({ uint64_t s = 0; for (size_t i = 0; i < batch_count; i++) s += batch_spread[i]; s; }) / (double)batch_count) / 1000.0 : 0.0,
+			(double)percentile(batch_spread, batch_count, 0.50) / 1000.0,
+			(double)percentile(batch_spread, batch_count, 0.90) / 1000.0,
+			(double)percentile(batch_spread, batch_count, 0.99) / 1000.0,
+			(double)percentile(batch_spread, batch_count, 0.999) / 1000.0,
+			batch_count ? (double)batch_spread[batch_count - 1] / 1000.0 : 0.0);
 
 		if (csv_path)
 			fclose(csv);
@@ -363,5 +393,7 @@ out:
 	free(submit_ns);
 	free(io_lat);
 	free(batch_lat);
+	free(batch_first_lat);
+	free(batch_spread);
 	return rc;
 }

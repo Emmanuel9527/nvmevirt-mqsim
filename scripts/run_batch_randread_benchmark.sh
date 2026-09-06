@@ -13,6 +13,7 @@ REAL_REPEATS="${REAL_REPEATS:-10}"
 SIM_REPEATS="${SIM_REPEATS:-1}"
 BS="${BS:-4k}"
 BATCH_SIZE="${BATCH_SIZE:-16}"
+BATCH_SIZES="${BATCH_SIZES:-$BATCH_SIZE}"
 SIZE="${SIZE:-6G}"
 RUNTIME="${RUNTIME:-20}"
 WARMUP="${WARMUP:-3}"
@@ -84,6 +85,7 @@ run_one() {
   local repeat="$2"
   local device="$3"
   local out_csv="$4"
+  local batch_size="$5"
   local seed
 
   if [[ ! -b "$device" ]]; then
@@ -93,7 +95,7 @@ run_one() {
 
   seed=$((RANDSEED + repeat))
   echo
-  echo "===== ${target} repeat ${repeat}: batch randread bs=${BS} batch=${BATCH_SIZE} size=${SIZE} runtime=${RUNTIME}s gap=${GAP_US}us ====="
+  echo "===== ${target} repeat ${repeat}: batch randread bs=${BS} batch=${batch_size} size=${SIZE} runtime=${RUNTIME}s gap=${GAP_US}us ====="
   drop_os_caches
   wash_ssd_cache
   drop_os_caches
@@ -101,7 +103,7 @@ run_one() {
   "${SUDO[@]}" "$BENCH_BIN" \
     --filename "$device" \
     --bs "$BS" \
-    --batch-size "$BATCH_SIZE" \
+    --batch-size "$batch_size" \
     --size "$SIZE" \
     --runtime "$RUNTIME" \
     --warmup "$WARMUP" \
@@ -141,12 +143,24 @@ print(",".join([
     row["io_p999_us"],
     row["io_p9999_us"],
     row["io_max_us"],
+    row["batch_first_mean_us"],
+    row["batch_first_p50_us"],
+    row["batch_first_p90_us"],
+    row["batch_first_p99_us"],
+    row["batch_first_p999_us"],
+    row["batch_first_max_us"],
     row["batch_mean_us"],
     row["batch_p50_us"],
     row["batch_p90_us"],
     row["batch_p99_us"],
     row["batch_p999_us"],
     row["batch_max_us"],
+    row["batch_spread_mean_us"],
+    row["batch_spread_p50_us"],
+    row["batch_spread_p90_us"],
+    row["batch_spread_p99_us"],
+    row["batch_spread_p999_us"],
+    row["batch_spread_max_us"],
 ]))
 PY
 }
@@ -162,8 +176,12 @@ rows = list(csv.DictReader(open(raw_path, newline="")))
 keys = [
     "total_ios", "total_batches", "iops", "bw_mib_s", "io_mean_us", "io_stddev_us",
     "io_p50_us", "io_p90_us", "io_p99_us", "io_p999_us", "io_p9999_us", "io_max_us",
+    "batch_first_mean_us", "batch_first_p50_us", "batch_first_p90_us",
+    "batch_first_p99_us", "batch_first_p999_us", "batch_first_max_us",
     "batch_mean_us", "batch_p50_us", "batch_p90_us", "batch_p99_us", "batch_p999_us",
     "batch_max_us",
+    "batch_spread_mean_us", "batch_spread_p50_us", "batch_spread_p90_us",
+    "batch_spread_p99_us", "batch_spread_p999_us", "batch_spread_max_us",
 ]
 groups = {}
 for row in rows:
@@ -198,13 +216,13 @@ import sys
 
 rows = list(csv.DictReader(open(sys.argv[1], newline="")))
 print("Batch 4KB uniform random read benchmark average:")
-print(f'{"Target":>10} {"Batch":>6} {"BS":>8} {"Gap(us)":>8} {"Repeats":>8} {"IOPS":>12} {"MeanIO(us)":>12} {"P50":>10} {"P90":>10} {"P99":>10} {"P999":>10} {"BatchMean":>12} {"BatchP999":>12}')
-print("=" * 150)
+print(f'{"Target":>10} {"Batch":>6} {"BS":>8} {"Gap(us)":>8} {"Repeats":>8} {"IOPS":>12} {"MeanIO(us)":>12} {"First(us)":>12} {"BatchMean":>12} {"Spread(us)":>12} {"BatchP999":>12}')
+print("=" * 142)
 for r in rows:
     print(
         f'{r["target"]:>10} {r["batch_size"]:>6} {r["bs"]:>8} {r["gap_us"]:>8} {r["repeats"]:>8} '
-        f'{r["iops"]:>12} {r["io_mean_us"]:>12} {r["io_p50_us"]:>10} {r["io_p90_us"]:>10} '
-        f'{r["io_p99_us"]:>10} {r["io_p999_us"]:>10} {r["batch_mean_us"]:>12} {r["batch_p999_us"]:>12}'
+        f'{r["iops"]:>12} {r["io_mean_us"]:>12} {r["batch_first_mean_us"]:>12} '
+        f'{r["batch_mean_us"]:>12} {r["batch_spread_mean_us"]:>12} {r["batch_p999_us"]:>12}'
     )
 PY
 }
@@ -213,21 +231,25 @@ require_cmd python3
 compile_bench
 mkdir -p "$RESULT_DIR"
 
-echo "target,repeat,bs,batch_size,gap_us,runtime_s,warmup_s,total_ios,total_batches,iops,bw_mib_s,io_mean_us,io_stddev_us,io_p50_us,io_p90_us,io_p99_us,io_p999_us,io_p9999_us,io_max_us,batch_mean_us,batch_p50_us,batch_p90_us,batch_p99_us,batch_p999_us,batch_max_us" > "$RAW_CSV"
+echo "target,repeat,bs,batch_size,gap_us,runtime_s,warmup_s,total_ios,total_batches,iops,bw_mib_s,io_mean_us,io_stddev_us,io_p50_us,io_p90_us,io_p99_us,io_p999_us,io_p9999_us,io_max_us,batch_first_mean_us,batch_first_p50_us,batch_first_p90_us,batch_first_p99_us,batch_first_p999_us,batch_first_max_us,batch_mean_us,batch_p50_us,batch_p90_us,batch_p99_us,batch_p999_us,batch_max_us,batch_spread_mean_us,batch_spread_p50_us,batch_spread_p90_us,batch_spread_p99_us,batch_spread_p999_us,batch_spread_max_us" > "$RAW_CSV"
 
 if [[ "$RUN_REAL" == "1" ]]; then
-  for repeat in $(seq 1 "$REAL_REPEATS"); do
-    run_csv="${RESULT_DIR}/real_ssd_repeat${repeat}_batch${BATCH_SIZE}_bs${BS}_gap${GAP_US}.csv"
-    run_one "real_ssd" "$repeat" "$REAL_DEVICE" "$run_csv"
-    append_run_csv "real_ssd" "$repeat" "$run_csv" >> "$RAW_CSV"
+  for batch_size in $BATCH_SIZES; do
+    for repeat in $(seq 1 "$REAL_REPEATS"); do
+      run_csv="${RESULT_DIR}/real_ssd_repeat${repeat}_batch${batch_size}_bs${BS}_gap${GAP_US}.csv"
+      run_one "real_ssd" "$repeat" "$REAL_DEVICE" "$run_csv" "$batch_size"
+      append_run_csv "real_ssd" "$repeat" "$run_csv" >> "$RAW_CSV"
+    done
   done
 fi
 
 if [[ "$RUN_SIM" == "1" ]]; then
-  for repeat in $(seq 1 "$SIM_REPEATS"); do
-    run_csv="${RESULT_DIR}/sim_ssd_repeat${repeat}_batch${BATCH_SIZE}_bs${BS}_gap${GAP_US}.csv"
-    run_one "sim_ssd" "$repeat" "$SIM_DEVICE" "$run_csv"
-    append_run_csv "sim_ssd" "$repeat" "$run_csv" >> "$RAW_CSV"
+  for batch_size in $BATCH_SIZES; do
+    for repeat in $(seq 1 "$SIM_REPEATS"); do
+      run_csv="${RESULT_DIR}/sim_ssd_repeat${repeat}_batch${batch_size}_bs${BS}_gap${GAP_US}.csv"
+      run_one "sim_ssd" "$repeat" "$SIM_DEVICE" "$run_csv" "$batch_size"
+      append_run_csv "sim_ssd" "$repeat" "$run_csv" >> "$RAW_CSV"
+    done
   done
 fi
 

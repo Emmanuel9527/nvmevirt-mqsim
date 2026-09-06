@@ -17,6 +17,18 @@ sys_mbps_fp.dat
 # Generated result plots/tables. Keep hand-written diagrams in SVG.
 plots/*.png
 plots/*.csv
+results/
+
+# Local generated media and logs
+*.log
+*.out
+*.err
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
 
 # Local benchmark binaries
 scripts/batch_randread_bench

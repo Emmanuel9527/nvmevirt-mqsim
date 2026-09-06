@@ -223,6 +223,7 @@ def main():
     parser.add_argument("--d2c-glob", required=True)
     parser.add_argument("--q2c-glob", required=True)
     parser.add_argument("--aqd-glob", default="")
+    parser.add_argument("--no-plots", action="store_true")
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -237,9 +238,10 @@ def main():
         metric_values[name] = values_us
         stats = summary(values_us)
         rows.append((name, pattern, files, stats))
-        write_svg(output_dir / f"{args.run_label}.{name.lower()}_hist.svg", f"{args.run_label} {name} latency histogram", values_us)
+        if not args.no_plots:
+            write_svg(output_dir / f"{args.run_label}.{name.lower()}_hist.svg", f"{args.run_label} {name} latency histogram", values_us)
 
-    png_paths = write_matplotlib_plots(output_dir, args.run_label, metric_values)
+    png_paths = [] if args.no_plots else write_matplotlib_plots(output_dir, args.run_label, metric_values)
 
     with open(summary_path, "w") as f:
         f.write("run_label,metric,count,avg_us,p50_us,p90_us,p99_us,p999_us,max_us,source_files\n")

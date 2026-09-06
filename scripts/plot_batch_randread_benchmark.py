@@ -23,8 +23,12 @@ def load_rows(path):
                     "batch_mean_us_std": float(row.get("batch_mean_us_std", "0")),
                     "io_p999_us": float(row["io_p999_us"]),
                     "io_p999_us_std": float(row.get("io_p999_us_std", "0")),
+                    "batch_first_mean_us": float(row.get("batch_first_mean_us", "0")),
+                    "batch_first_mean_us_std": float(row.get("batch_first_mean_us_std", "0")),
                     "batch_p999_us": float(row["batch_p999_us"]),
                     "batch_p999_us_std": float(row.get("batch_p999_us_std", "0")),
+                    "batch_spread_mean_us": float(row.get("batch_spread_mean_us", "0")),
+                    "batch_spread_mean_us_std": float(row.get("batch_spread_mean_us_std", "0")),
                 }
             )
     return rows
@@ -38,7 +42,11 @@ def label_name(target):
 
 
 def draw_bar(rows, y_key, title, ylabel, out_path, log_y=False):
-    labels = [label_name(r["target"]) for r in rows]
+    multiple_batches = len({r["batch_size"] for r in rows}) > 1
+    labels = [
+        f'{label_name(r["target"])}\nbatch={r["batch_size"]}' if multiple_batches else label_name(r["target"])
+        for r in rows
+    ]
     values = [r[y_key] for r in rows]
     yerr = [r.get(f"{y_key}_std", 0.0) for r in rows]
     colors = ["black" if r["target"] == "real_ssd" else "#1f77b4" for r in rows]
@@ -54,6 +62,41 @@ def draw_bar(rows, y_key, title, ylabel, out_path, log_y=False):
     plt.tight_layout()
     plt.savefig(out_path, dpi=180)
     plt.close()
+
+
+def draw_batch_sweep(rows, y_key, title, ylabel, out_path, log_y=False):
+    targets = sorted({r["target"] for r in rows}, key=lambda t: 0 if t == "real_ssd" else 1)
+    colors = {"real_ssd": "black", "sim_ssd": "#1f77b4"}
+    markers = {"real_ssd": "s", "sim_ssd": "o"}
+
+    fig, ax = plt.subplots(figsize=(9, 5.2))
+    for target in targets:
+        target_rows = sorted([r for r in rows if r["target"] == target], key=lambda r: r["batch_size"])
+        x = [r["batch_size"] for r in target_rows]
+        y = [r[y_key] for r in target_rows]
+        yerr = [r.get(f"{y_key}_std", 0.0) for r in target_rows]
+        linestyle = "--" if target == "real_ssd" else "-"
+        ax.errorbar(
+            x,
+            y,
+            yerr=yerr if any(v > 0 for v in yerr) else None,
+            fmt=markers.get(target, "o") + linestyle,
+            color=colors.get(target),
+            capsize=4,
+            label=label_name(target),
+        )
+
+    ax.set_title(title)
+    ax.set_xlabel("Batch Size")
+    ax.set_ylabel(ylabel)
+    ax.set_xticks(sorted({r["batch_size"] for r in rows}))
+    if log_y:
+        ax.set_yscale("log")
+    ax.grid(True, alpha=0.28)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=180)
+    plt.close(fig)
 
 
 def draw_bar_on_axis(ax, rows, y_key, title, ylabel, log_y=False):
@@ -111,7 +154,9 @@ def draw_combined(rows, out_path):
 def draw_shared_axes(rows, out_path):
     metrics = [
         ("io_mean_us", "Per-I/O mean latency"),
+        ("batch_first_mean_us", "Batch first-completion latency"),
         ("batch_mean_us", "Batch mean latency"),
+        ("batch_spread_mean_us", "Batch completion spread"),
         ("batch_p999_us", "Batch P99.9 latency"),
     ]
     targets = ["real_ssd", "sim_ssd"]
@@ -153,7 +198,9 @@ def draw_shared_axes(rows, out_path):
 def draw_ratio(rows, out_path):
     metrics = [
         ("io_mean_us", "Per-I/O mean latency"),
+        ("batch_first_mean_us", "Batch first-completion latency"),
         ("batch_mean_us", "Batch mean latency"),
+        ("batch_spread_mean_us", "Batch completion spread"),
         ("batch_p999_us", "Batch P99.9 latency"),
     ]
     by_target = {row["target"]: row for row in rows}
@@ -189,6 +236,7 @@ def main():
     out_dir = pathlib.Path(sys.argv[2])
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = load_rows(csv_path)
+    multiple_batches = len({r["batch_size"] for r in rows}) > 1
 
     draw_bar(
         rows,
@@ -199,10 +247,24 @@ def main():
     )
     draw_bar(
         rows,
+        "batch_first_mean_us",
+        "Batch Random Read First Completion Latency",
+        "First Completion Latency (us)",
+        out_dir / "batch_randread_first_completion_latency.png",
+    )
+    draw_bar(
+        rows,
         "batch_mean_us",
         "Batch Random Read Batch Mean Latency",
         "Batch Mean Latency (us)",
         out_dir / "batch_randread_batch_mean_latency.png",
+    )
+    draw_bar(
+        rows,
+        "batch_spread_mean_us",
+        "Batch Random Read Completion Spread",
+        "Last - First Completion (us)",
+        out_dir / "batch_randread_completion_spread.png",
     )
     draw_bar(
         rows,
@@ -222,6 +284,43 @@ def main():
     draw_combined(rows, out_dir / "batch_randread_combined.png")
     draw_shared_axes(rows, out_dir / "batch_randread_combined_shared_axes.png")
     draw_ratio(rows, out_dir / "batch_randread_sim_real_ratio.png")
+
+    if multiple_batches:
+        draw_batch_sweep(
+            rows,
+            "io_mean_us",
+            "Batch Random Read Per-I/O Mean Latency",
+            "Per-I/O Mean Latency (us)",
+            out_dir / "batch_randread_io_mean_latency_by_batch_size.png",
+        )
+        draw_batch_sweep(
+            rows,
+            "batch_first_mean_us",
+            "Batch Random Read First Completion Latency",
+            "First Completion Latency (us)",
+            out_dir / "batch_randread_first_completion_latency_by_batch_size.png",
+        )
+        draw_batch_sweep(
+            rows,
+            "batch_mean_us",
+            "Batch Random Read Batch Mean Latency",
+            "Batch Mean Latency (us)",
+            out_dir / "batch_randread_batch_mean_latency_by_batch_size.png",
+        )
+        draw_batch_sweep(
+            rows,
+            "batch_spread_mean_us",
+            "Batch Random Read Completion Spread",
+            "Last - First Completion (us)",
+            out_dir / "batch_randread_completion_spread_by_batch_size.png",
+        )
+        draw_batch_sweep(
+            rows,
+            "iops",
+            "Batch Random Read IOPS",
+            "IOPS",
+            out_dir / "batch_randread_iops_by_batch_size.png",
+        )
 
 
 if __name__ == "__main__":
