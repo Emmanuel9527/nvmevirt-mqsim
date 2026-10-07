@@ -1,0 +1,1 @@
+Each point is the arithmetic mean of 10 run-level measurements. Standard deviations use the sample estimator (n-1). Latency is mean query latency, in microseconds. Plots show means only; no error bars. Source: each run_N performance_summary.txt.

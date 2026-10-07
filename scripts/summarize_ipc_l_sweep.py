@@ -172,7 +172,7 @@ def plot_rows(out_dir, rows, title_prefix):
     ax.set_xticklabels([str(v) for v in l_values])
     ax.set_xlabel("DiskANN L")
     ax.set_ylabel("Time (us)")
-    ax.set_title(f"{title_prefix} IPC cost in microseconds")
+    ax.set_title(f"{title_prefix} IPC cost")
     ax.grid(True, axis="y", alpha=0.3)
     ax.legend()
     fig.tight_layout()

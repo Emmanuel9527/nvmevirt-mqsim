@@ -17,7 +17,11 @@ sys_mbps_fp.dat
 # Generated result plots/tables. Keep hand-written diagrams in SVG.
 plots/*.png
 plots/*.csv
+# Raw benchmark outputs and traces are intentionally kept out of Git.
+# Add only reviewed, compact summaries with `git add -f` when needed.
 results/
+*.blkparse.bin
+*.blktrace.bin
 
 # Local generated media and logs
 *.log
@@ -32,3 +36,10 @@ results/
 
 # Local benchmark binaries
 scripts/batch_randread_bench
+
+# Real-SSD sweep wrapper currently contains machine-specific device/data paths.
+# Parameterize it before sharing with another machine.
+/scripts/run_real_ssd_diskann_pair.sh
+
+# Generated presentation export; keep its Markdown/source builder instead.
+presentations/**/*.html

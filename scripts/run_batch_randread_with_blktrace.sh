@@ -44,8 +44,9 @@ SUMMARY_TXT="${SUMMARY_TXT:-${RESULT_DIR}/batch_randread_blktrace_summary.txt}"
 
 SUDO=()
 if [[ "${EUID}" -ne 0 ]]; then
-  SUDO=(sudo)
+  SUDO=(sudo -n)
 fi
+ACTIVE_BLKTRACE_PID=""
 
 require_cmd() {
   local cmd="$1"
@@ -123,7 +124,7 @@ drop_os_caches() {
   fi
 
   sync
-  echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null
+  echo 3 | "${SUDO[@]}" tee /proc/sys/vm/drop_caches >/dev/null
 }
 
 wash_ssd_cache() {
@@ -158,7 +159,7 @@ compile_bench() {
 stop_blktrace() {
   local pid="${1:-}"
   if [[ -n "$pid" ]]; then
-    sudo kill -INT "$pid" >/dev/null 2>&1 || true
+    "${SUDO[@]}" kill -INT "$pid" >/dev/null 2>&1 || true
     wait "$pid" >/dev/null 2>&1 || true
   fi
 }
@@ -313,13 +314,23 @@ run_one_with_trace() {
   echo "  device=${device}"
   echo "  block_device=${block_device}"
 
+  # Authenticate before any background process can compete for the terminal.
+  if [[ "${EUID}" -ne 0 ]]; then
+    sudo -v
+  fi
+
   drop_os_caches
   wash_ssd_cache
   drop_os_caches
 
-  sudo blktrace -d "$block_device" -D "$TRACE_DIR" -o "${run_label}.blktrace" &
+  "${SUDO[@]}" blktrace -d "$block_device" -D "$TRACE_DIR" -o "${run_label}.blktrace" &
   blktrace_pid="$!"
+  ACTIVE_BLKTRACE_PID="$blktrace_pid"
   sleep 1
+  if ! kill -0 "$blktrace_pid" 2>/dev/null; then
+    echo "blktrace failed to start for ${run_label}" >&2
+    exit 1
+  fi
 
   set +e
   "${SUDO[@]}" "$BENCH_BIN" \
@@ -336,6 +347,7 @@ run_one_with_trace() {
   set -e
 
   stop_blktrace "$blktrace_pid"
+  ACTIVE_BLKTRACE_PID=""
   blktrace_pid=""
 
   if [[ "$bench_status" -ne 0 ]]; then
@@ -391,6 +403,9 @@ require_cmd gcc
 require_cmd blktrace
 require_cmd blkparse
 require_cmd btt
+trap 'stop_blktrace "$ACTIVE_BLKTRACE_PID"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 compile_bench
 mkdir -p "$RESULT_DIR" "$TRACE_DIR" "$FINAL_RESULT_DIR" "$FINAL_BLOCK_SUMMARY_DIR"
 
