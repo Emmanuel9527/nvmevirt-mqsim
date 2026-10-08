@@ -10,6 +10,15 @@ the gain?
 The VUC is the mechanism used to submit work to C3. The outcome of interest is
 end-to-end search performance, not command latency by itself.
 
+## Target architecture
+
+![Host–SSD codesign architecture](images/host_ssd_codesign_architecture.svg)
+
+The dotted Host links show the two logical request paths: ordinary NVMe I/O is
+handled by C0-C2, while search VUCs are routed to C3. The drawing is a logical
+architecture view; it does not by itself specify the physical NVMe function,
+queue mapping, or DMA command format.
+
 ## First model boundary
 
 Use one VUC per batch of nodes selected by the Host. The Host continues to own
