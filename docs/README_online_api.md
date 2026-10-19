@@ -265,6 +265,32 @@ Fast_forward(time)
 - 若 L 增加時 `Mean latency` 增加，但 TSU queue statistics 幾乎不變，代表 latency growth 可能主要只是固定 flash read latency 被更多 I/O 累加，而不是 SSD 內部壅塞。
 - 若 real SSD 出現非線性 latency growth，但 simulator 的 TSU queue 和 busy timing 都很平，代表 simulator 仍缺少 real SSD firmware/internal scheduling/cache state 造成的動態壅塞。
 
+## Simulator-side C3 VUC endpoint
+
+The native daemon executes `EXPAND_AND_FILTER_BATCH` requests submitted through
+Linux NVMe passthrough and NVMeVirt's dedicated VUC shared-memory ring. The Host
+stages input with a standard WRITE to the reserved SLBA and fetches the result
+with opcode `0xC0`, correlated by query/batch ID. Ordinary READ/WRITE requests
+use the existing I/O ring; both paths use the same MQSim native event engine.
+The C3 service uses a single serialized command slot and allows at most 16
+outstanding internal page reads.
+
+The command/completion ABI is in `nvmevirt/vuc_protocol.h`. Buffer references
+are offsets into bounded 64 KiB IPC payload slots. NVMeVirt copies Host input
+and result data through PRPs. The Host client is
+the independent C++ project `../vucann`, built as `build/vucann_search`;
+see [VUCANN README](../../vucann/README.md) for build and launch instructions.
+
+Supply separate NBR and vector image paths and per-page LBA maps. Create the
+page maps from the mounted files with `scripts/vuc/build_page_lba_map.py`, and
+include those files in `--preload-extents`. The NBR and vector payloads can
+then be read from the NVMeVirt memory-backed filesystem while MQSim independently
+models their corresponding 4 KiB NAND reads. The VUC completion reports
+neighbor/vector NAND time, DBuf/DMA, parse, DSP, C3 queue wait, and result counts.
+Unknown service costs use explicit nonzero sensitivity assumptions; see
+[the timing model audit](vuc_timing_model.md) for shared bidirectional DMA,
+128 KiB buffers, cycle derivation, and trace metrics.
+
 ## Preload 與 query 的順序
 
 目前假設 index files 已經先寫入 `/mnt/nvmevirt`，並且 logical address layout 已經完成 block shuffling。daemon 啟動後會先完成 extent preload，再開始接 host query I/O：

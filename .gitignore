@@ -41,5 +41,14 @@ scripts/batch_randread_bench
 # Parameterize it before sharing with another machine.
 /scripts/run_real_ssd_diskann_pair.sh
 
+# Local DiskANN baseline helpers contain this machine's device and dataset paths.
+# Parameterize them before sharing with another machine.
+/scripts/diskann_baseline/
+
+# Locally generated vector datasets and DiskANN indexes.
+*.fbin
+*.ibin
+*.index
+
 # Generated presentation export; keep its Markdown/source builder instead.
 presentations/**/*.html
